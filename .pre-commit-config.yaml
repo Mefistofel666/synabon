@@ -1,0 +1,27 @@
+repos:
+  - repo: 'https://github.com/pre-commit/pre-commit-hooks'
+    rev: 'v4.4.0'
+    hooks:
+      - id: check-ast
+      - id: check-case-conflict
+      - id: check-docstring-first
+      - id: debug-statements
+      - id: end-of-file-fixer
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+  - repo: 'https://github.com/PyCQA/isort'
+    rev: '5.12.0'
+    hooks:
+      - id: isort
+        name: format with isort
+  - repo: 'https://github.com/psf/black'
+    rev: '23.9.1'
+    hooks:
+      - id: black
+        name: format with black
+  - repo: 'https://github.com/PyCQA/flake8'
+    rev: '6.1.0'
+    hooks:
+      - id: flake8
+        name: lint with flake8
