@@ -1,2 +1,4 @@
 .venv
 poetry.lock
+.ipynb_checkpoints
+__pycache__
