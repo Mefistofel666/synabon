@@ -6,9 +6,10 @@ authors = ["Kirill Duvakin <kbduvakin1@mts.ru>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.11,<3.13"
+python = ">=3.10,<3.13"
 numpy = "^1.25.2"
 pandas = "^2.1.1"
+pytest = "^7.4.2"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.4.0"

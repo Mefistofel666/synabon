@@ -1,0 +1,8 @@
+Metadata-Version: 2.1
+Name: synabon
+Version: 0.1.0
+Summary: Python tool for generating data
+Author: Kirill Duvakin
+Author-email: kbduvakin1@mts.ru
+Requires-Dist: numpy>=1.25
+Requires-Dist: pandas>=2.1
