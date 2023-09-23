@@ -8,6 +8,7 @@ setup(
     author='Kirill Duvakin',
     author_email='kbduvakin1@mts.ru',
     packages=find_packages(include=['synabon']),
+    download_url=""
     install_requires=['numpy>=1.25', 'pandas>=2.1'],
     setup_requires=['pytest-runner'],
     tests_require=['pytest==7.4.2'],

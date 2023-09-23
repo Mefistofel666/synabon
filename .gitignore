@@ -1,5 +1,8 @@
 .venv
 .eggs
+dist
+build
+*egg-info
 .pytest_cache
 poetry.lock
 .ipynb_checkpoints
