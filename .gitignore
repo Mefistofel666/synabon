@@ -2,7 +2,7 @@
 .eggs
 dist
 build
-*egg-info
+*.egg-info
 .pytest_cache
 poetry.lock
 .ipynb_checkpoints

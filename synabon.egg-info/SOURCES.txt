@@ -1,8 +1,10 @@
 .flake8
 .gitignore
 .pre-commit-config.yaml
+LICENSE.txt
 README.md
 pyproject.toml
+setup.cfg
 setup.py
 notebooks/examples.ipynb
 synabon/__init__.py
