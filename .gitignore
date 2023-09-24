@@ -1,4 +1,9 @@
 .venv
+.eggs
+dist
+build
+*.egg*
+.pytest_cache
 poetry.lock
 .ipynb_checkpoints
 __pycache__
