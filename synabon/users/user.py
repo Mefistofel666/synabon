@@ -29,7 +29,21 @@ class UserGenerator:
         delta = end - start
         int_delta = (delta.days * 24 * 60 * 60) + delta.seconds
         random_second = randrange(int_delta)
-        return start + timedelta(seconds=random_second)
+        random_date = start + timedelta(seconds=random_second)
+
+        while random_date.weekday() in [5, 6]:
+            delta = end - start
+            int_delta = (delta.days * 24 * 60 * 60) + delta.seconds
+            random_second = randrange(int_delta)
+            random_date = start + timedelta(seconds=random_second)
+
+        return random_date
+
+    def __get_dates(
+        self, start_dt: datetime, end_dt: datetime, n_dates: int
+    ) -> List[datetime]:
+        dates = [self.__get_random_date(start_dt, end_dt) for _ in range(n_dates)]
+        return sorted(dates)
 
     def __get_transactions(
         self, start_balance: float, end_balance: float
@@ -38,7 +52,7 @@ class UserGenerator:
         high = start_balance / self.n_interactions
         transactions = np.random.uniform(low=low, high=high, size=self.n_interactions)
         transactions = (
-            transactions / np.sum(transactions, axis=0) * (end_balance - start_balance)
+            transactions / np.sum(transactions) * abs(end_balance - start_balance)
         )
         return transactions
 
@@ -62,7 +76,10 @@ class UserGenerator:
         return uuid.uuid4()
 
     def __get_user_end_balance(self, start_balance: float) -> float:
-        return np.random.normal(loc=start_balance, scale=10)
+        end_balance = np.random.normal(loc=start_balance + 100, scale=10)
+        while end_balance <= 0:
+            end_balance = np.random.normal(loc=start_balance + 100, scale=10)
+        return end_balance
 
     def get_data(
         self, balance_generator: Callable, start_dt: datetime, end_dt: datetime
@@ -75,13 +92,14 @@ class UserGenerator:
             user_interactions = self.__get_transactions(
                 start_balance=user_start_balance, end_balance=user_end_balance
             )
+            user_dates = self.__get_dates(start_dt, end_dt, self.n_interactions)
             row = self.__get_record(
                 user_id, user_start_balance, None, "registration", start_dt
             )
             data.append(row)
             user_curr_balance = user_start_balance
-            for j in range(1, self.n_interactions):
-                date = self.__get_random_date(self.start_dt, self.end_dt)
+            for j in range(0, self.n_interactions):
+                date = user_dates[j]
                 interaction = user_interactions[j]
                 user_curr_balance += interaction
                 row = self.__get_record(
