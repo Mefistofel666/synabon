@@ -1,34 +1,146 @@
 from datetime import datetime, timedelta
 from random import randrange
 import uuid
-from typing import Callable, List
+from typing import Callable, List, Optional
+import warnings
+from functools import partial
 
 import numpy as np
 import pandas as pd
+from faker import Faker
 
 
 class UserGenerator:
     def __init__(
         self,
         n_users: int,
-        n_interactions: int,
+        start_balance_generator: Callable[..., float] | None = None,
+        end_balance_generator: Callable[..., float] | None = None,
+        n_interactions_generator: Callable[..., float] | None = None,
+        countries: List[str] | None = None,
+        n_countries: int | None = 10,
+        p_countries: List[float] | None = None,
     ) -> None:
-        self.n_users = n_users
-        self.n_interactions = n_interactions
-
-        self.trans_commission_mult = 0.003  # 0.3%
-
-        self.default_columns = [
+        """
+        Parameters
+        ----------
+        n_users : int
+            Numbers of users.
+        start_balance_generator
+            function to generate initial balance.
+        end_balance_generator
+            function to generate final balance.
+        n_interactions_generator
+            function to generate number of transactions per user.
+        countries
+            list of possible countries.
+        n_countries
+            number of possible countries.
+        p_countries
+            finite-dimensional distribution of countries.
+        """
+        self.__default_scale = 1000
+        self.__default_lam = 10
+        self.__default_columns = [
             "user_id",
             "user_balance",
             "interaction_sum",
             "interaction_type",
             "transaction_commission",
+            "country",
+            "device",
             "date",
         ]
 
+        self.n_users = n_users
+        self.start_balance_gen = self.__get_start_balance_gen(start_balance_generator)
+        self.end_balance_gen = self.__get_end_balance_gen(end_balance_generator)
+        self.n_interactions_gen = self.__get_n_interactions_gen(
+            n_interactions_generator
+        )
+        self.__trans_commission_mult = 0.003  # 0.3%
+
+        self.fake = Faker()
+
+        self.countries = self.__get_possible_countries(countries, n_countries)
+        self.p_countries = p_countries
+        self.__check_p_countries()
+
+    def __get_default_start_balance(self) -> Callable[..., float]:
+        return partial(np.random.exponential, scale=self.__default_scale)
+
+    def __get_default_end_balance(self) -> Callable[..., float]:
+        return partial(np.random.exponential, scale=self.__default_scale)
+
+    def __get_default_interactions_generator(self) -> Callable[..., float]:
+        return partial(np.random.poisson, lam=self.__default_lam)
+
+    def __check_gen(self, gen: Callable[..., float]) -> bool:
+        try:
+            gen()
+        except Exception:
+            return False
+
+    def __get_start_balance_gen(self, gen: Optional[Callable]) -> Callable[..., float]:
+        if not gen:
+            return self.__get_default_start_balance()
+
+        if not self.__check_gen(gen):
+            warnings.warn(
+                "The passed start_balance_generator should be callable without arguments!"
+                "Use default start_balance_generator."
+            )
+            return self.__get_default_start_balance()
+
+    def __get_end_balance_gen(self, gen: Optional[Callable]) -> Callable[..., float]:
+        if not gen:
+            return self.__get_default_end_balance()
+
+        if not self.__check_gen(gen):
+            warnings.warn(
+                "The passed end_balance_generator should be callable without arguments!"
+                "Use default start_end_generator."
+            )
+            return self.__get_default_end_balance()
+
+    def __get_n_interactions_gen(self, gen: Optional[Callable]) -> Callable[..., float]:
+        if not gen:
+            return self.__get_default_interactions_generator()
+
+        if not self.__check_gen(gen):
+            warnings.warn(
+                "The passed n_interactions_gen should be callable without arguments!"
+                "Use default n_interactions_generator."
+            )
+            return self.__get_default_interactions_generator()
+
+    def __get_possible_countries(
+        self,
+        countries: List[str] | None,
+        n_countries: int | None,
+    ) -> List[str]:
+        if not countries and not n_countries:
+            raise ValueError(
+                "At least one of the arguments"
+                / "`countries` or `n_countries` must be passed!"
+            )
+        if not countries:
+            return [self.fake.country() for _ in range(n_countries)]
+        return countries
+
     @staticmethod
-    def __get_random_date(start: datetime, end: datetime) -> datetime:
+    def get_random_date(start: datetime, end: datetime) -> datetime:
+        """Function that generates a date in a given interval excluding weekends.
+        Parameters
+        ----------
+        start : datetime
+            Start interval
+        end : datetime
+            End interval
+        Returns
+        -------
+        datetime
+        """
         delta = end - start
         int_delta = (delta.days * 24 * 60 * 60) + delta.seconds
         random_second = randrange(int_delta)
@@ -42,19 +154,58 @@ class UserGenerator:
 
         return random_date
 
+    def __check_p_countries(self) -> None:
+        if self.p_countries:
+            if len(self.p_countries) != len(self.countries):
+                raise ValueError(
+                    "length of p_countries must be equal number of countries!"
+                )
+
+    def __get_random_country(self) -> str:
+        return np.random.choice(self.countries, p=self.p_countries)
+
+    def __get_random_device(self) -> str:
+        return self.fake.user_agent()
+
     def __get_dates(
         self, start_dt: datetime, end_dt: datetime, n_dates: int
     ) -> List[datetime]:
-        dates = [self.__get_random_date(start_dt, end_dt) for _ in range(n_dates)]
+        """Function that generates a dates in a given interval excluding weekends.
+        Parameters
+        ----------
+        start : datetime
+            Start interval
+        end : datetime
+            End interval
+        n_dates : int
+            Number of dates
+        Returns
+        -------
+        list[datetime]
+        """
+        dates = [self.get_random_date(start_dt, end_dt) for _ in range(n_dates)]
         return sorted(dates)
 
     def __get_transactions(
-        self, start_balance: float, end_balance: float
-    ) -> np.ndarray:
+        self, start_balance: float, end_balance: float, n_transactions: int
+    ) -> List[float]:
+        """A function that generates several transactions with an balance.
+        Parameters
+        ----------
+        start_balance : float
+            Initial state of balance.
+        end_balance : float
+            Final state of balance.
+        n_transactions: int
+            Number of transactions.
+        Returns
+        -------
+        list[float]
+        """
         curr_balance = start_balance
         max_balance = np.random.uniform(1, 3) * max(curr_balance, end_balance)
         transactions = []
-        for _ in range(self.n_interactions - 1):
+        for _ in range(n_transactions - 1):
             next_balance = np.random.uniform(0, max_balance)
             transaction = next_balance - curr_balance
             transactions.append(transaction)
@@ -71,7 +222,9 @@ class UserGenerator:
         user_balance: float,
         interaction_sum: float,
         interaction_type: str,
-        transaction_commision: float,
+        transaction_commission: float,
+        country: str,
+        device: str,
         interaction_dt: datetime,
     ) -> List:
         return [
@@ -79,51 +232,62 @@ class UserGenerator:
             user_balance,
             interaction_sum,
             interaction_type,
-            transaction_commision,
+            transaction_commission,
+            country,
+            device,
             interaction_dt,
         ]
 
     def __get_random_id(self) -> uuid.UUID:
         return uuid.uuid4()
 
-    def __get_user_end_balance(self, start_balance: float) -> float:
-        scale = 10
-        loc = start_balance
-        end_balance = loc + scale * np.random.standard_cauchy()
-        while end_balance <= 0:
-            end_balance = loc + scale * np.random.standard_cauchy()
-        return end_balance
-
     def get_data(
-        self, balance_generator: Callable, start_dt: datetime, end_dt: datetime
+        self,
+        start_dt: datetime,
+        end_dt: datetime,
     ) -> pd.DataFrame:
         data = []
         for _ in range(self.n_users):
             user_id = self.__get_random_id()
-            user_start_balance = balance_generator()
-            user_end_balance = self.__get_user_end_balance(user_start_balance)
+            user_start_balance = self.start_balance_gen()
+            user_end_balance = self.end_balance_gen()
+            user_n_interaction = self.n_interactions_gen()
+            country = self.__get_random_country()
+            device = self.__get_random_device()
+
             user_interactions = self.__get_transactions(
-                start_balance=user_start_balance, end_balance=user_end_balance
+                start_balance=user_start_balance,
+                end_balance=user_end_balance,
+                n_transactions=user_n_interaction,
             )
-            user_dates = self.__get_dates(start_dt, end_dt, self.n_interactions)
+            user_dates = self.__get_dates(start_dt, end_dt, user_n_interaction)
             row = self.__get_record(
-                user_id, user_start_balance, None, "registration", None, start_dt
+                user_id,
+                user_start_balance,
+                None,
+                "registration",
+                None,
+                country,
+                device,
+                start_dt,
             )
             data.append(row)
             user_curr_balance = user_start_balance
-            for j in range(0, self.n_interactions):
+            for j in range(0, user_n_interaction):
                 date = user_dates[j]
                 transaction = user_interactions[j]
                 user_curr_balance += transaction
-                transaction_commission = self.trans_commission_mult * abs(transaction)
+                transaction_commission = self.__trans_commission_mult * abs(transaction)
                 row = self.__get_record(
                     user_id,
                     user_curr_balance,
                     transaction,
                     "transaction",
                     transaction_commission,
+                    country,
+                    device,
                     date,
                 )
                 data.append(row)
-        df = pd.DataFrame(data, columns=self.default_columns).sort_values(by="date")
+        df = pd.DataFrame(data, columns=self.__default_columns).sort_values(by="date")
         return df
