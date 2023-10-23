@@ -9,16 +9,15 @@ import numpy as np
 import pandas as pd
 from faker import Faker
 
+from .utils import get_full
+
 
 class UserGenerator:
     def __init__(
         self,
         n_users: int,
-        start_balance_generator: Callable[..., float] | None = None,
-        end_balance_generator: Callable[..., float] | None = None,
-        n_interactions_generator: Callable[..., float] | None = None,
         countries: List[str] | None = None,
-        n_countries: int | None = 10,
+        n_countries: int | None = None,
         p_countries: List[float] | None = None,
     ) -> None:
         """
@@ -53,11 +52,6 @@ class UserGenerator:
         ]
 
         self.n_users = n_users
-        self.start_balance_gen = self.__get_start_balance_gen(start_balance_generator)
-        self.end_balance_gen = self.__get_end_balance_gen(end_balance_generator)
-        self.n_interactions_gen = self.__get_n_interactions_gen(
-            n_interactions_generator
-        )
         self.__trans_commission_mult = 0.003  # 0.3%
 
         self.fake = Faker()
@@ -186,8 +180,9 @@ class UserGenerator:
         dates = [self.get_random_date(start_dt, end_dt) for _ in range(n_dates)]
         return sorted(dates)
 
-    def __get_transactions(
-        self, start_balance: float, end_balance: float, n_transactions: int
+    @staticmethod
+    def get_transactions(
+        start_balance: float, end_balance: float, n_transactions: int
     ) -> List[float]:
         """A function that generates several transactions with an balance.
         Parameters
@@ -238,42 +233,39 @@ class UserGenerator:
             interaction_dt,
         ]
 
-    def __get_random_id(self) -> uuid.UUID:
-        return uuid.uuid4()
+    def __get_random_id(self) -> str:
+        return str(uuid.uuid4())
 
-    def get_data(
+    def append_data(
         self,
-        start_dt: datetime,
-        end_dt: datetime,
+        df: pd.DataFrame,
+        end_balance_generator: Callable[..., float] | None = None,
+        n_interactions_generator: Callable[..., float] | None = None,
+        duration: timedelta = timedelta(days=14),
     ) -> pd.DataFrame:
+        """TODO: add docstring"""
         data = []
-        for _ in range(self.n_users):
-            user_id = self.__get_random_id()
-            user_start_balance = self.start_balance_gen()
-            user_end_balance = self.end_balance_gen()
-            user_n_interaction = self.n_interactions_gen()
-            country = self.__get_random_country()
-            device = self.__get_random_device()
+        end_balance_gen = self.__get_end_balance_gen(end_balance_generator)
+        n_interactions_gen = self.__get_n_interactions_gen(n_interactions_generator)
+        full = get_full(df)
+        start_dt = df["date"].max().to_pydatetime()
+        end_dt = start_dt + duration
 
-            user_interactions = self.__get_transactions(
+        for idx, row in full.iterrows():
+            user_id = row["user_id"]
+            user_start_balance = row["user_balance"]
+            user_end_balance = end_balance_gen()
+            user_n_interaction = n_interactions_gen()
+            user_dates = self.__get_dates(start_dt, end_dt, user_n_interaction)
+            country = row["country"]
+            device = row["device"]
+            user_interactions = UserGenerator.get_transactions(
                 start_balance=user_start_balance,
                 end_balance=user_end_balance,
                 n_transactions=user_n_interaction,
             )
-            user_dates = self.__get_dates(start_dt, end_dt, user_n_interaction)
-            row = self.__get_record(
-                user_id,
-                user_start_balance,
-                None,
-                "registration",
-                None,
-                country,
-                device,
-                start_dt,
-            )
-            data.append(row)
             user_curr_balance = user_start_balance
-            for j in range(0, user_n_interaction):
+            for j in range(user_n_interaction):
                 date = user_dates[j]
                 transaction = user_interactions[j]
                 user_curr_balance += transaction
@@ -289,5 +281,66 @@ class UserGenerator:
                     date,
                 )
                 data.append(row)
-        df = pd.DataFrame(data, columns=self.__default_columns).sort_values(by="date")
+        new_df = pd.DataFrame(data, columns=self.__default_columns)
+        return pd.concat([df, new_df]).sort_values(by="date").reset_index(drop=True)
+
+    def get_data(
+        self,
+        start_balance_generator: Callable[..., float] | None = None,
+        end_balance_generator: Callable[..., float] | None = None,
+        n_interactions_generator: Callable[..., float] | None = None,
+        start_dt: datetime = datetime(2023, 1, 1),
+        end_dt: datetime = datetime(2023, 2, 1),
+    ) -> pd.DataFrame:
+        start_balance_gen = self.__get_start_balance_gen(start_balance_generator)
+        end_balance_gen = self.__get_end_balance_gen(end_balance_generator)
+        n_interactions_gen = self.__get_n_interactions_gen(n_interactions_generator)
+        data = []
+        for _ in range(self.n_users):
+            user_id = self.__get_random_id()
+            user_start_balance = start_balance_gen()
+            user_end_balance = end_balance_gen()
+            user_n_interaction = n_interactions_gen()
+            user_dates = self.__get_dates(start_dt, end_dt, user_n_interaction)
+            country = self.__get_random_country()
+            device = self.__get_random_device()
+
+            user_interactions = UserGenerator.get_transactions(
+                start_balance=user_start_balance,
+                end_balance=user_end_balance,
+                n_transactions=user_n_interaction,
+            )
+            row = self.__get_record(
+                user_id,
+                user_start_balance,
+                None,
+                "registration",
+                None,
+                country,
+                device,
+                start_dt,
+            )
+            data.append(row)
+            user_curr_balance = user_start_balance
+            for j in range(user_n_interaction):
+                date = user_dates[j]
+                transaction = user_interactions[j]
+                user_curr_balance += transaction
+                transaction_commission = self.__trans_commission_mult * abs(transaction)
+                row = self.__get_record(
+                    user_id,
+                    user_curr_balance,
+                    transaction,
+                    "transaction",
+                    transaction_commission,
+                    country,
+                    device,
+                    date,
+                )
+                data.append(row)
+        df = (
+            pd.DataFrame(data, columns=self.__default_columns)
+            .sort_values(by="date")
+            .reset_index(drop=True)
+        )
         return df
