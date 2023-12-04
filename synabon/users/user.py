@@ -74,6 +74,7 @@ class UserGenerator:
             gen()
         except Exception:
             return False
+        return True
 
     def __get_start_balance_gen(self, gen: Optional[Callable]) -> Callable[..., float]:
         if not gen:
@@ -86,6 +87,8 @@ class UserGenerator:
             )
             return self.__get_default_start_balance()
 
+        return gen
+
     def __get_end_balance_gen(self, gen: Optional[Callable]) -> Callable[..., float]:
         if not gen:
             return self.__get_default_end_balance()
@@ -97,6 +100,8 @@ class UserGenerator:
             )
             return self.__get_default_end_balance()
 
+        return gen
+
     def __get_n_interactions_gen(self, gen: Optional[Callable]) -> Callable[..., float]:
         if not gen:
             return self.__get_default_interactions_generator()
@@ -107,6 +112,8 @@ class UserGenerator:
                 "Use default n_interactions_generator."
             )
             return self.__get_default_interactions_generator()
+
+        return gen
 
     def __get_possible_countries(
         self,

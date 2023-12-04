@@ -1,1 +1,1 @@
-from .bucket import make_buckets
+from .random_split import random_split
